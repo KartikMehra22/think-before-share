@@ -68,7 +68,7 @@ export default function Home() {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        const response = await fetch("http://localhost:8000/");
+        const response = await fetch("http://127.0.0.1:8000/");
         if (response.ok) {
           const data = await response.json();
           setApiStatus("connected");
