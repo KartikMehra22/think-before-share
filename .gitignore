@@ -26,3 +26,7 @@ build/
 # OS Metadata
 .DS_Store
 Thumbs.db
+
+# Search API cache during development
+backend/fixtures/search_cache.json
+
