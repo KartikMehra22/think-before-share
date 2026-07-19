@@ -1,7 +1,12 @@
 import re
 
-def extract_video_id(url: str) -> str:
-    """Extract YouTube video ID from various URL formats."""
+class InvalidURLError(Exception):
+    pass
+
+def extract_video_id(url: str) -> dict:
+    """Extract YouTube video ID from various URL formats.
+    Returns: { "video_id": str, "url": str }
+    """
     patterns = [
         r"(?:v=|\/)([0-9A-Za-z_-]{11}).*",
         r"(?:embed\/)([0-9A-Za-z_-]{11})",
@@ -10,5 +15,5 @@ def extract_video_id(url: str) -> str:
     for pattern in patterns:
         match = re.search(pattern, url)
         if match:
-            return match.group(1)
-    raise ValueError(f"Could not extract video ID from URL: {url}")
+            return {"video_id": match.group(1), "url": url}
+    raise InvalidURLError(f"Could not extract video ID from URL: {url}")

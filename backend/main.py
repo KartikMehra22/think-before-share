@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from models import AnalyzeRequest, AnalysisResult, EvidencedClaim
-from modules.video_resolver import extract_video_id
+from modules.video_resolver import extract_video_id, InvalidURLError
 from modules.transcript import get_transcript
 from modules.claims import extract_claims
 from modules.evidence_search import search_evidence
@@ -75,10 +75,11 @@ async def analyze_video(request: AnalyzeRequest):
 
     # Step 1: Extract video ID
     try:
-        video_id = extract_video_id(url)
+        resolved = extract_video_id(url)
+        video_id = resolved["video_id"]
         logger.info(f"Extracted video ID: {video_id}")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except InvalidURLError:
+        raise HTTPException(status_code=400, detail="invalid_url")
 
     # Step 2: Fetch transcript
     try:
