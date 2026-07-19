@@ -113,7 +113,7 @@ async def run_analysis_pipeline(job_id: str, url: str):
             claims = extract_claims(transcript)
             logger.info(f"Extracted {len(claims)} claims")
         except Exception as e:
-            logger.error(f"Claims extraction failed: {e}")
+            logger.error(f"Claims extraction failed: {repr(e)}")
             # M3 requires graceful degradation: return empty claims instead of crashing
             claims = []
 

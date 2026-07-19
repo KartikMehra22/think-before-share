@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 import google.generativeai as genai
 from models import Claim, ClaimsResponse
 from dotenv import load_dotenv
@@ -14,7 +15,7 @@ def extract_claims(transcript: str) -> list[Claim]:
     """Use Gemini to extract factual claims from a transcript."""
     model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
     model = genai.GenerativeModel(model_name)
-    prompt = CLAIMS_EXTRACTION_PROMPT.format(transcript=transcript)
+    prompt = CLAIMS_EXTRACTION_PROMPT.replace("{transcript}", transcript)
 
     response = model.generate_content(
         prompt,
@@ -25,13 +26,22 @@ def extract_claims(transcript: str) -> list[Claim]:
     )
 
     raw = response.text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    data = json.loads(raw)
+    
+    # Robustly extract JSON block
+    start_idx = raw.find('{')
+    end_idx = raw.rfind('}')
+    
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        raw_json = raw[start_idx:end_idx+1]
+    else:
+        raw_json = raw
+        
+    try:
+        data = json.loads(raw_json)
+    except json.JSONDecodeError as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"JSON decode error. Raw text: {raw}")
+        raise ValueError(f"Failed to parse JSON: {e}")
     parsed = ClaimsResponse(**data)
     
     # M3 Hard Guardrail: Enforce max 20 claims in code

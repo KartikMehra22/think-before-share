@@ -16,7 +16,7 @@ def get_insights(transcript: str) -> dict:
     try:
         model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
         model = genai.GenerativeModel(model_name)
-        prompt = INSIGHTS_PROMPT.format(transcript=transcript)
+        prompt = INSIGHTS_PROMPT.replace("{transcript}", transcript)
 
         response = model.generate_content(
             prompt,
@@ -27,13 +27,17 @@ def get_insights(transcript: str) -> dict:
         )
 
         raw = response.text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        raw = raw.strip()
+        
+        # Robustly extract JSON block
+        start_idx = raw.find('{')
+        end_idx = raw.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            raw_json = raw[start_idx:end_idx+1]
+        else:
+            raw_json = raw
 
-        return json.loads(raw)
+        return json.loads(raw_json)
     except Exception as e:
         logger.error(f"Failed to extract media literacy insights: {e}")
         return {"signals": []}

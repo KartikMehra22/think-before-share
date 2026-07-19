@@ -63,14 +63,7 @@ export default function Home() {
     setAppState("loading");
     setErrorMsg("");
     setResult(null);
-
-    // Animate loading steps
-    let stepIndex = 0;
     setLoadingStep(0);
-    const stepInterval = setInterval(() => {
-      stepIndex = Math.min(stepIndex + 1, LOADING_STEPS.length - 1);
-      setLoadingStep(stepIndex);
-    }, 3500);
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/analyze`, {
@@ -79,18 +72,42 @@ export default function Home() {
         body: JSON.stringify({ url }),
       });
 
-      clearInterval(stepInterval);
-
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.detail || "Analysis failed. Please try again.");
       }
 
-      const data: AnalysisResult = await response.json();
-      setResult(data);
-      setAppState("result");
+      const { job_id } = await response.json();
+
+      const poll = async () => {
+        try {
+          const res = await fetch(`${BACKEND_URL}/api/analyze/${job_id}`);
+          if (!res.ok) throw new Error("Failed to fetch job status");
+          const job = await res.json();
+          
+          if (job.stage === "done") {
+            setResult(job.result);
+            setAppState("result");
+          } else if (job.stage === "error") {
+            throw new Error(job.error || "Analysis failed");
+          } else {
+            // Update loading step based on actual backend progress!
+            const completed = job.stages_complete?.length || 0;
+            setLoadingStep(Math.min(completed, LOADING_STEPS.length - 1));
+            
+            // Poll again in 1 second
+            setTimeout(poll, 1000);
+          }
+        } catch (err) {
+          setErrorMsg(err instanceof Error ? err.message : "An unexpected error occurred.");
+          setAppState("error");
+        }
+      };
+
+      // Start polling
+      poll();
+
     } catch (err: unknown) {
-      clearInterval(stepInterval);
       setErrorMsg(err instanceof Error ? err.message : "An unexpected error occurred.");
       setAppState("error");
     }
