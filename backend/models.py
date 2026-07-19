@@ -27,6 +27,7 @@ class AnalysisResult(BaseModel):
     claims: list[EvidencedClaim]
     overall_verdict: Literal["Mostly Accurate", "Mixed", "Mostly Misleading", "Unverifiable"]
     literacy_tip: str
+    signals: list[str] = []
 
 
 class AnalyzeRequest(BaseModel):

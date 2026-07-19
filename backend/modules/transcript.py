@@ -159,17 +159,15 @@ def _fetch_via_yt_dlp(video_id: str) -> str:
 
 
 
-def get_transcript(video_id: str, max_chars: int = 12000) -> str:
+def get_transcript(video_id: str, max_chars: int = 12000) -> dict:
     """
-    Fetch the transcript for a YouTube video and return as a single string.
+    Fetch the transcript for a YouTube video and return as a dictionary.
     Truncates to max_chars to avoid exceeding LLM context limits.
 
     Strategy:
       1. Try youtube-transcript-api (fast, no download).
       2. If that fails, fall back to yt-dlp subtitle extraction.
-      3. If both fail, raise ValueError — the caller decides what to do.
-
-    Logs which method succeeded so callers can see which path was taken.
+      3. If both fail, return status: "no_transcript".
     """
     # --- Primary: youtube-transcript-api ---
     try:
@@ -189,15 +187,26 @@ def get_transcript(video_id: str, max_chars: int = 12000) -> str:
             logger.info("yt_dlp_fallback: successfully fetched transcript for %s", video_id)
             method = "yt_dlp_fallback"
         except Exception as fallback_err:
-            raise ValueError(
+            logger.error(
                 f"Both transcript methods failed for video '{video_id}'. "
                 f"transcript_api error: {primary_err} | "
                 f"yt_dlp error: {fallback_err}"
             )
+            return {
+                "video_id": video_id,
+                "status": "no_transcript",
+                "transcript": None,
+                "segments": []
+            }
 
     # Truncate to keep within LLM token limits
     if len(full_text) > max_chars:
         full_text = full_text[:max_chars] + "... [transcript truncated]"
 
     logger.info("Transcript fetched via '%s' (%d chars).", method, len(full_text))
-    return full_text
+    return {
+        "video_id": video_id,
+        "status": "ok",
+        "transcript": full_text,
+        "segments": []
+    }

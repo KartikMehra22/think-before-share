@@ -14,6 +14,7 @@ from modules.claims import extract_claims
 from modules.evidence_search import search_evidence
 from modules.evidence_analyze import rate_claim_with_evidence
 from modules.evidence_map import get_overall_verdict
+from modules.insights import get_insights
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -82,11 +83,19 @@ async def analyze_video(request: AnalyzeRequest):
         raise HTTPException(status_code=400, detail="invalid_url")
 
     # Step 2: Fetch transcript
-    try:
-        transcript = get_transcript(video_id)
-        logger.info(f"Fetched transcript ({len(transcript)} chars)")
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    transcript_data = get_transcript(video_id)
+    if transcript_data["status"] == "no_transcript":
+        logger.warning(f"No transcript found for video {video_id}")
+        return AnalysisResult(
+            video_id=video_id,
+            video_url=url,
+            claims=[],
+            overall_verdict="Unverifiable",
+            literacy_tip="This video does not have closed captions, so we cannot extract and verify its claims."
+        )
+
+    transcript = transcript_data["transcript"]
+    logger.info(f"Fetched transcript ({len(transcript)} chars)")
 
     # Step 3: Extract claims via Gemini
     try:
@@ -94,12 +103,16 @@ async def analyze_video(request: AnalyzeRequest):
         logger.info(f"Extracted {len(claims)} claims")
     except Exception as e:
         logger.error(f"Claims extraction failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Claim extraction failed: {str(e)}")
+        # M3 requires graceful degradation: return empty claims instead of crashing
+        claims = []
 
     if not claims:
-        raise HTTPException(
-            status_code=422,
-            detail="No verifiable factual claims could be extracted from this video."
+        return AnalysisResult(
+            video_id=video_id,
+            video_url=url,
+            claims=[],
+            overall_verdict="Unverifiable",
+            literacy_tip="No verifiable factual claims could be extracted from this video."
         )
 
     # Step 4 & 5: Search + rate each claim
@@ -121,14 +134,19 @@ async def analyze_video(request: AnalyzeRequest):
             sources = []
 
         # Rate claim with Gemini
-        try:
-            rating = rate_claim_with_evidence(claim_text, snippets, sources)
-            status = rating.get("status", "Insufficient Evidence")
-            evidence_summary = rating.get("evidence_summary", "Unable to retrieve evidence.")
-        except Exception as e:
-            logger.warning(f"Rating failed for claim '{claim_text[:50]}': {e}")
+        if not snippets:
+            # M5 Hard Guardrail: skip LLM call if no evidence is found
             status = "Insufficient Evidence"
-            evidence_summary = "Evidence rating could not be completed."
+            evidence_summary = "No search evidence was found for this claim."
+        else:
+            try:
+                rating = rate_claim_with_evidence(claim_text, snippets, sources)
+                status = rating.get("status", "Insufficient Evidence")
+                evidence_summary = rating.get("evidence_summary", "Unable to retrieve evidence.")
+            except Exception as e:
+                logger.warning(f"Rating failed for claim '{claim_text[:50]}': {e}")
+                status = "Insufficient Evidence"
+                evidence_summary = "Evidence rating could not be completed."
 
         evidenced_claims.append(
             EvidencedClaim(
@@ -152,10 +170,15 @@ async def analyze_video(request: AnalyzeRequest):
         overall_verdict = "Unverifiable"
         literacy_tip = "Always verify claims before sharing content online."
 
+    # Step 7: Media Literacy Insights
+    insights = get_insights(transcript)
+    signals = insights.get("signals", [])
+
     return AnalysisResult(
         video_id=video_id,
         video_url=url,
         claims=evidenced_claims,
         overall_verdict=overall_verdict,
         literacy_tip=literacy_tip,
+        signals=signals,
     )

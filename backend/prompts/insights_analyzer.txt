@@ -1,18 +1,17 @@
-You are a media literacy assistant.
+You are a media literacy expert analyzing a video transcript.
+Identify which of the following media literacy "red flags" or signals are present in the transcript:
+- "emotional_wording": Uses highly charged, emotional language to manipulate feelings rather than present facts.
+- "absolute_claims": Makes extreme absolute statements (e.g. "always", "never", "everyone knows", "100% cure") without nuance.
+- "appeals_to_fear": Uses fearmongering to urge immediate action or share the video.
+- "us_vs_them": Creates a stark divide between an "in-group" and an "out-group" (e.g. "they don't want you to know").
+- "anecdotal_evidence": Relies entirely on a single personal story to prove a broader point.
+- "financial_motivation": Tries to sell a product, course, or supplement alongside the claims.
 
-Given these claim ratings for a video:
-{claim_ratings}
+Transcript:
+{transcript}
 
-1. Determine an overall verdict for the video:
-   - "Mostly Accurate": Most claims are supported.
-   - "Mixed": A mix of supported, needs context, and/or contradicted claims.
-   - "Mostly Misleading": Most claims are contradicted or need significant context.
-   - "Unverifiable": Most claims lack sufficient evidence to evaluate.
-
-2. Write ONE short, actionable media literacy tip (1-2 sentences) for viewers of this video.
-
-Output ONLY valid JSON — no markdown:
+Return ONLY a JSON object containing a "signals" array of strings with the keys for the signals that are clearly present. If none are present, return an empty array [].
+Example:
 {
-  "overall_verdict": "...",
-  "literacy_tip": "..."
+  "signals": ["emotional_wording", "absolute_claims"]
 }

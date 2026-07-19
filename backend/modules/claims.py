@@ -33,4 +33,6 @@ def extract_claims(transcript: str) -> list[Claim]:
 
     data = json.loads(raw)
     parsed = ClaimsResponse(**data)
-    return parsed.claims
+    
+    # M3 Hard Guardrail: Enforce max 20 claims in code
+    return parsed.claims[:20]
