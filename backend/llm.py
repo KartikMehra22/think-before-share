@@ -2,7 +2,9 @@ import os
 import json
 import google.generativeai as genai
 from models import Claim, ClaimsResponse
+from dotenv import load_dotenv
 
+load_dotenv()
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 CLAIMS_EXTRACTION_PROMPT = """You are a media literacy expert analyzing YouTube video transcripts.
@@ -76,7 +78,8 @@ Output ONLY valid JSON — no markdown:
 
 def extract_claims(transcript: str) -> list[Claim]:
     """Use Gemini to extract factual claims from a transcript."""
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+    model = genai.GenerativeModel(model_name)
     prompt = CLAIMS_EXTRACTION_PROMPT.format(transcript=transcript)
 
     response = model.generate_content(
@@ -102,7 +105,8 @@ def extract_claims(transcript: str) -> list[Claim]:
 
 def rate_claim_with_evidence(claim: str, evidence_snippets: list[str], sources: list[str]) -> dict:
     """Use Gemini to rate a claim against retrieved evidence."""
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+    model = genai.GenerativeModel(model_name)
     evidence_text = "\n\n".join(
         f"[Source {i+1}: {sources[i] if i < len(sources) else 'Unknown'}]\n{snippet}"
         for i, snippet in enumerate(evidence_snippets)
@@ -130,7 +134,8 @@ def rate_claim_with_evidence(claim: str, evidence_snippets: list[str], sources: 
 
 def get_overall_verdict(claim_ratings: list[dict]) -> dict:
     """Use Gemini to produce an overall verdict and literacy tip."""
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+    model = genai.GenerativeModel(model_name)
     ratings_text = "\n".join(
         f"- Claim: \"{r['claim']}\" → {r['status']}"
         for r in claim_ratings

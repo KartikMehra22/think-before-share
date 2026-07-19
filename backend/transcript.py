@@ -39,7 +39,12 @@ def _fetch_via_transcript_api(video_id: str) -> list[dict]:
         if not keys:
             raise ValueError("No transcripts available for this video (no_transcript).")
         transcript = transcript_list.find_generated_transcript(keys)
-        return transcript.fetch()
+        
+        # In 0.6.2, we can just fetch whatever language it is!
+        try:
+            return transcript.translate('en').fetch()
+        except Exception:
+            return transcript.fetch()
 
 
 def _parse_vtt(vtt_text: str) -> str:

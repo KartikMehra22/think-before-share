@@ -4,13 +4,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+# Load environment variables FIRST before importing local modules that depend on them
+load_dotenv()
+
 from models import AnalyzeRequest, AnalysisResult, EvidencedClaim
 from transcript import extract_video_id, get_transcript
 from llm import extract_claims, rate_claim_with_evidence, get_overall_verdict
 from search import search_evidence
-
-# Load environment variables
-load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
