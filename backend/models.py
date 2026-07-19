@@ -32,3 +32,15 @@ class AnalysisResult(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     url: str
+
+
+class AnalyzeResponse(BaseModel):
+    job_id: str
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    stage: str
+    stages_complete: list[str] = []
+    result: AnalysisResult | None = None
+    error: str | None = None
