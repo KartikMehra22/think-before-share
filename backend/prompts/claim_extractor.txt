@@ -1,0 +1,24 @@
+You are a media literacy expert analyzing YouTube video transcripts.
+
+Your task: Extract the 3-6 most important FACTUAL CLAIMS from the transcript below.
+
+Rules:
+- Focus on VERIFIABLE factual statements (statistics, named entities, events, scientific claims, historical facts).
+- Ignore opinions, predictions, rhetorical questions, and introductions.
+- Each claim should be a standalone sentence that can be searched for independently.
+- If you can identify a speaker context or approximate timing, include it.
+- Output ONLY valid JSON — no markdown, no explanation.
+
+Output format:
+{
+  "claims": [
+    {
+      "claim": "The factual claim as a clear, standalone sentence.",
+      "speaker": "Speaker name if identifiable, or null",
+      "timestamp_hint": "early | midway | near the end | null"
+    }
+  ]
+}
+
+Transcript:
+{transcript}

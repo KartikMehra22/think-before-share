@@ -8,9 +8,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from models import AnalyzeRequest, AnalysisResult, EvidencedClaim
-from transcript import extract_video_id, get_transcript
-from llm import extract_claims, rate_claim_with_evidence, get_overall_verdict
-from search import search_evidence
+from modules.video_resolver import extract_video_id
+from modules.transcript import get_transcript
+from modules.claims import extract_claims
+from modules.evidence_search import search_evidence
+from modules.evidence_analyze import rate_claim_with_evidence
+from modules.evidence_map import get_overall_verdict
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
