@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import logging
 from tavily import TavilyClient
 
@@ -21,7 +22,8 @@ def _load_cache() -> dict:
             return json.load(f)
     except Exception as e:
         logger.warning(
-            f"Failed to parse search cache file at {CACHE_FILE}: {e}. Falling back to empty cache."
+            "Failed to parse search cache file at %s: %s. Falling back to empty cache.",
+            CACHE_FILE, e,
         )
         return {}
 
@@ -31,8 +33,9 @@ def _save_cache(cache: dict):
         os.makedirs(CACHE_DIR, exist_ok=True)
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(cache, f, indent=2, ensure_ascii=False)
+        logger.debug("search_cache: saved %d entries to disk", len(cache))
     except Exception as e:
-        logger.warning(f"Failed to write search cache file at {CACHE_FILE}: {e}")
+        logger.warning("Failed to write search cache file at %s: %s", CACHE_FILE, e)
 
 def search_evidence(claim: str, max_results: int = 3) -> dict:
     """
@@ -48,8 +51,14 @@ def search_evidence(claim: str, max_results: int = 3) -> dict:
     if use_cache:
         cache = _load_cache()
         if normalized_claim in cache:
-            logger.info(f"Search cache hit for claim: '{claim}'")
-            return cache[normalized_claim]
+            cached = cache[normalized_claim]
+            logger.info(
+                "search_evidence: CACHE HIT  snippets=%d  claim=%.60s…",
+                len(cached.get("snippets", [])), claim,
+            )
+            return cached
+
+    logger.info("search_evidence: CACHE MISS — calling Tavily  claim=%.60s…", claim)
 
     api_key = os.environ.get("TAVILY_API_KEY")
     if not api_key:
@@ -59,13 +68,16 @@ def search_evidence(claim: str, max_results: int = 3) -> dict:
 
     # Use a fact-checking oriented search query
     query = f'fact check: "{claim}"'
+    logger.debug("search_evidence: query=%r", query)
 
+    t0 = time.monotonic()
     response = client.search(
         query=query,
         search_depth="basic",
         max_results=max_results,
         include_answer=True,
     )
+    tavily_elapsed = time.monotonic() - t0
 
     snippets = []
     sources = []
@@ -84,6 +96,12 @@ def search_evidence(claim: str, max_results: int = 3) -> dict:
             sources.append(url)
 
     result_data = {"snippets": snippets, "sources": sources}
+    logger.info(
+        "search_evidence: Tavily returned in %.2fs  snippets=%d  sources=%d",
+        tavily_elapsed,
+        len(snippets),
+        len([s for s in sources if s != "tavily-synthesis"]),
+    )
 
     if use_cache:
         # Reload cache to avoid race conditions/overwriting recent writes in same/separate process
@@ -92,4 +110,3 @@ def search_evidence(claim: str, max_results: int = 3) -> dict:
         _save_cache(cache)
 
     return result_data
-

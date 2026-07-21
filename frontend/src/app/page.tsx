@@ -283,7 +283,7 @@ export default function Home() {
               <p className="text-purple-400 text-sm font-medium animate-pulse">
                 {LOADING_STEPS[loadingStep]}
               </p>
-              <p className="text-slate-500 text-xs mt-2">This may take 30–60 seconds</p>
+              <p className="text-slate-500 text-xs mt-2">This may take up to 2 minutes on free API tier</p>
             </div>
             <div className="flex gap-2">
               {LOADING_STEPS.map((_, i) => (
