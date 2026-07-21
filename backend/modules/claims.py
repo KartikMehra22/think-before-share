@@ -67,5 +67,5 @@ def _do_extract_claims(transcript: str, model_name: str) -> list[Claim]:
 
 def extract_claims(transcript: str) -> list[Claim]:
     """Use Gemini to extract factual claims from a transcript."""
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+    model_name = os.environ.get("GEMINI_MODEL")
     return gemini_retry(_do_extract_claims, transcript, model_name, label="extract_claims")

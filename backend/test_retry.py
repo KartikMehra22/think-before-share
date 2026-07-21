@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-model = genai.GenerativeModel("gemini-flash-latest")
+model = genai.GenerativeModel(os.environ.get("GEMINI_MODEL"))
 try:
     for i in range(30):
         print(f"Call {i}")

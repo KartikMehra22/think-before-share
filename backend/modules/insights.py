@@ -62,7 +62,7 @@ def get_insights(transcript: str) -> dict:
         logger.info("get_insights: transcript is empty — returning empty signals")
         return {"signals": []}
 
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+    model_name = os.environ.get("GEMINI_MODEL")
     logger.info("get_insights: model=%s  transcript_len=%d chars", model_name, len(transcript))
     
     return gemini_retry(_do_get_insights, transcript, model_name, label="get_insights")

@@ -57,5 +57,5 @@ def _do_rate_claim(claim: str, evidence_snippets: list[str], sources: list[str],
 
 def rate_claim_with_evidence(claim: str, evidence_snippets: list[str], sources: list[str]) -> dict:
     """Use Gemini to rate a claim against retrieved evidence."""
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+    model_name = os.environ.get("GEMINI_MODEL")
     return gemini_retry(_do_rate_claim, claim, evidence_snippets, sources, model_name, label="rate_claim")
