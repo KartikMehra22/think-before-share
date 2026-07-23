@@ -1,3 +1,9 @@
+# Named weights for claim evaluation scoring
+WEIGHT_SUPPORTED = 100.0
+WEIGHT_NEEDS_CONTEXT = 55.0
+WEIGHT_INSUFFICIENT = 40.0
+WEIGHT_CONTRADICTED = 0.0
+
 def get_overall_verdict(claim_ratings: list[dict], signals_count: int = 0) -> dict:
     """
     Produce a mathematical trust_score (0-100), overall verdict, and credibility tier
@@ -12,9 +18,6 @@ def get_overall_verdict(claim_ratings: list[dict], signals_count: int = 0) -> di
         }
 
     total = len(claim_ratings)
-    supported_count = sum(1 for r in claim_ratings if r.get("status") == "Supported")
-    needs_context_count = sum(1 for r in claim_ratings if r.get("status") == "Needs Context")
-    contradicted_count = sum(1 for r in claim_ratings if r.get("status") == "Contradicted")
     insufficient_count = sum(1 for r in claim_ratings if r.get("status") == "Insufficient Evidence")
 
     # If all claims have insufficient evidence
@@ -33,13 +36,13 @@ def get_overall_verdict(claim_ratings: list[dict], signals_count: int = 0) -> di
         confidence = float(r.get("confidence_score", 0.7))
 
         if status == "Supported":
-            item_score = 100.0 * confidence
+            item_score = WEIGHT_SUPPORTED * confidence
         elif status == "Needs Context":
-            item_score = 55.0 * confidence
+            item_score = WEIGHT_NEEDS_CONTEXT * confidence
         elif status == "Insufficient Evidence":
-            item_score = 40.0
+            item_score = WEIGHT_INSUFFICIENT
         else:  # Contradicted
-            item_score = 0.0
+            item_score = WEIGHT_CONTRADICTED
 
         total_score += item_score
 

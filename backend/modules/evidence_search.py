@@ -37,10 +37,42 @@ def _save_cache(cache: dict):
     except Exception as e:
         logger.warning("Failed to write search cache file at %s: %s", CACHE_FILE, e)
 
+def _search_duckduckgo(query: str, max_results: int = 4) -> dict:
+    """
+    100% Free search engine using DuckDuckGo (requires zero API keys).
+    Returns dict with 'snippets' and 'sources'.
+    """
+    try:
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            from duckduckgo_search import DDGS
+
+        logger.info("search_evidence: executing DuckDuckGo (100%% Free Engine) query=%r", query)
+        snippets = []
+        sources = []
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+            for res in results:
+                title = res.get("title", "")
+                body = res.get("body", "")
+                href = res.get("href", "")
+                if body:
+                    snippets.append(f"{title}: {body}"[:600])
+                    sources.append(href)
+        logger.info("search_evidence: DuckDuckGo returned snippets=%d sources=%d", len(snippets), len(sources))
+        return {"snippets": snippets, "sources": sources}
+    except Exception as exc:
+        logger.warning("search_evidence: DuckDuckGo search failed err=%s", exc)
+        return {"snippets": [], "sources": []}
+
+
 def search_evidence(claim: str, search_query: str | None = None, max_results: int = 4) -> dict:
     """
     Search the web for evidence related to a factual claim.
-    Returns a dict with 'snippets' (list of str) and 'sources' (list of URLs).
+    Dual Search Engine Architecture:
+      1. Primary Free Engine: DuckDuckGo Search (100% Free, zero API key requirement).
+      2. Secondary Engine: Tavily Search (if TAVILY_API_KEY is configured).
     Caching is enabled by default unless USE_CACHE=false in environment variables.
     """
     use_cache_str = os.environ.get("USE_CACHE", "true").lower()
@@ -58,80 +90,63 @@ def search_evidence(claim: str, search_query: str | None = None, max_results: in
             )
             return cached
 
-    logger.info("search_evidence: CACHE MISS — calling Tavily  claim=%.60s…", claim)
-
-    api_key = os.environ.get("TAVILY_API_KEY")
-    if not api_key:
-        raise ValueError("TAVILY_API_KEY is not set in environment variables.")
-
-    client = TavilyClient(api_key=api_key)
-
-    # Build an optimized, non-quoted fact-checking query
+    # Build optimized search query
     if search_query and len(search_query.strip()) > 3:
         clean_keywords = search_query.replace('"', '').strip()
         query = f"fact check {clean_keywords}"
     else:
-        # Strip quote marks and unnecessary punctuation from full claim sentence
         clean_claim = claim.replace('"', '').replace("'", "").strip()
         query = f"fact check {clean_claim}"
 
-    logger.debug("search_evidence: primary query=%r", query)
+    snippets = []
+    sources = []
 
-    t0 = time.monotonic()
-    try:
-        response = client.search(
-            query=query,
-            search_depth="basic",
-            max_results=max_results,
-            include_answer=True,
-        )
-    except Exception as exc:
-        logger.error("search_evidence: Tavily primary search failed err=%s", exc)
-        response = {}
+    # --- Engine 1: DuckDuckGo (100% Free & Keyless) ---
+    logger.info("search_evidence: calling DuckDuckGo Free Search  claim=%.60s…", claim)
+    ddg_res = _search_duckduckgo(query, max_results=max_results)
+    snippets = ddg_res["snippets"]
+    sources = ddg_res["sources"]
 
-    results_list = response.get("results", [])
-
-    # Fallback retry if 0 results were found
-    if not results_list and search_query:
-        clean_claim_term = claim.replace('"', '').replace("'", "").strip()[:80]
+    # Retry DuckDuckGo with a shorter entity query if 0 results
+    if not snippets:
+        clean_claim_term = claim.replace('"', '').replace("'", "").strip()[:70]
         fallback_query = f"fact check {clean_claim_term}"
-        logger.info("search_evidence: 0 hits on primary query — trying fallback query=%r", fallback_query)
+        logger.info("search_evidence: DuckDuckGo 0 hits — trying entity query=%r", fallback_query)
+        ddg_res = _search_duckduckgo(fallback_query, max_results=max_results)
+        snippets = ddg_res["snippets"]
+        sources = ddg_res["sources"]
+
+    # --- Engine 2: Tavily (Optional Secondary if configured and DDG had 0 hits) ---
+    api_key = os.environ.get("TAVILY_API_KEY")
+    if not snippets and api_key:
+        logger.info("search_evidence: DuckDuckGo returned 0 hits — trying Tavily API...")
+        t0 = time.monotonic()
         try:
+            client = TavilyClient(api_key=api_key)
             response = client.search(
-                query=fallback_query,
+                query=query,
                 search_depth="basic",
                 max_results=max_results,
                 include_answer=True,
             )
             results_list = response.get("results", [])
+
+            if response.get("answer"):
+                snippets.append(f"Tavily Summary: {response['answer']}")
+                sources.append("tavily-synthesis")
+
+            for result in results_list:
+                content = result.get("content", "").strip()
+                url = result.get("url", "")
+                if content:
+                    snippets.append(content[:600])
+                    sources.append(url)
+
+            logger.info("search_evidence: Tavily returned in %.2fs snippets=%d", time.monotonic() - t0, len(snippets))
         except Exception as exc:
-            logger.error("search_evidence: Tavily fallback search failed err=%s", exc)
-
-    tavily_elapsed = time.monotonic() - t0
-
-    snippets = []
-    sources = []
-
-    # Include Tavily's synthesized answer if available
-    if response.get("answer"):
-        snippets.append(f"Tavily Summary: {response['answer']}")
-        sources.append("tavily-synthesis")
-
-    # Include individual search result snippets
-    for result in results_list:
-        content = result.get("content", "").strip()
-        url = result.get("url", "")
-        if content:
-            snippets.append(content[:600])  # Limit each snippet
-            sources.append(url)
+            logger.warning("search_evidence: Tavily search error. err=%s", exc)
 
     result_data = {"snippets": snippets, "sources": sources}
-    logger.info(
-        "search_evidence: Tavily returned in %.2fs  snippets=%d  sources=%d",
-        tavily_elapsed,
-        len(snippets),
-        len([s for s in sources if s != "tavily-synthesis"]),
-    )
 
     if use_cache:
         cache = _load_cache()
@@ -139,4 +154,5 @@ def search_evidence(claim: str, search_query: str | None = None, max_results: in
         _save_cache(cache)
 
     return result_data
+
 
