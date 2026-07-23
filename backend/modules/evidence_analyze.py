@@ -41,14 +41,17 @@ def _do_rate_claim(claim: str, evidence_snippets: list[str], sources: list[str],
         time.monotonic() - t0, len(raw),
     )
 
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
+    # Robustly extract JSON block
+    start_idx = raw.find('{')
+    end_idx = raw.rfind('}')
+
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        raw_json = raw[start_idx:end_idx + 1]
+    else:
+        raw_json = raw
 
     try:
-        result = json.loads(raw)
+        result = json.loads(raw_json)
         logger.debug("rate_claim_with_evidence: parsed status=%s", result.get("status"))
         return result
     except json.JSONDecodeError as e:
