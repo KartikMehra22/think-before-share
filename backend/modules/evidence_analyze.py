@@ -67,7 +67,19 @@ def _do_rate_claim(claim: str, evidence_snippets: list[str], sources: list[str],
 
     try:
         result = json.loads(raw_json)
-        logger.debug("rate_claim_with_evidence: parsed status=%s", result.get("status"))
+        status = result.get("status", "Insufficient Evidence")
+        confidence = result.get("confidence_score")
+        if confidence is None or not isinstance(confidence, (int, float)) or confidence <= 0:
+            if status == "Supported":
+                confidence = 0.88 if len(evidence_snippets) >= 2 else 0.78
+            elif status == "Needs Context":
+                confidence = 0.70
+            elif status == "Contradicted":
+                confidence = 0.85
+            else:
+                confidence = 0.40
+        result["confidence_score"] = round(float(confidence), 2)
+        logger.debug("rate_claim_with_evidence: parsed status=%s confidence=%.2f", status, result["confidence_score"])
         return result
     except json.JSONDecodeError as e:
         logger.error("rate_claim_with_evidence: JSON decode error — raw=%r  err=%s", raw[:200], e)

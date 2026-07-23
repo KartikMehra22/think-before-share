@@ -12,11 +12,11 @@ Based strictly on the evidence above, evaluate the claim:
    - "Contradicted": The evidence directly disproves or contradicts the claim.
    - "Insufficient Evidence": The search results do not provide enough specific information to confirm or deny the claim.
 
-2. Provide a numerical confidence_score between 0.0 and 1.0 representing how strongly the provided snippets support your rating. (e.g., 0.90 for clear consensus, 0.40 for sparse evidence).
+2. Provide a unique, accurate numerical confidence_score between 0.15 and 0.99 reflecting the exact evidentiary certainty for THIS claim. (e.g., 0.92 for strong multi-source consensus, 0.72 for single source, 0.45 for sparse/vague evidence, 0.88 for clear contradiction). Do NOT use default or static values.
 
 3. Provide a concise 2-3 sentence evidence summary explaining your rating. Refer to specific source numbers like [Source 1] or [Source 2] where appropriate to justify your evaluation.
 
-Output ONLY valid JSON — no markdown, no text outside JSON:
+Output ONLY valid JSON — no markdown wrappers, no text outside JSON:
 {
   "status": "Supported",
   "confidence_score": 0.85,

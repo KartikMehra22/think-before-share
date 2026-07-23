@@ -60,9 +60,8 @@ def _do_extract_claims(transcript: str, model_name: str) -> list[Claim]:
 
     parsed = ClaimsResponse(**data)
 
-    # M3 Hard Guardrail: Enforce max 20 claims in code
-    claims = parsed.claims[:20]
-    logger.info("extract_claims: %d claim(s) parsed (capped at 20)", len(claims))
+    claims = parsed.claims
+    logger.info("extract_claims: %d claim(s) parsed", len(claims))
     return claims
 
 

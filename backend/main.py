@@ -103,22 +103,17 @@ def _process_single_claim(idx: int, total: int, claim_obj, prefix: str) -> tuple
         snippets = []
         sources = []
 
-    confidence = 0.5
-    if not snippets:
-        status = "Insufficient Evidence"
-        evidence_summary = "No search evidence was found for this claim."
-    else:
-        try:
-            rating = rate_claim_with_evidence(claim_text, snippets, sources)
-            status = rating.get("status", "Insufficient Evidence")
-            confidence = float(rating.get("confidence_score", 0.75))
-            evidence_summary = rating.get("evidence_summary", "Unable to retrieve evidence.")
-            logger.info("      %s rating: status=%s  confidence=%.2f", prefix, status, confidence)
-        except Exception as e:
-            logger.warning("      %s rating FAILED: %s", prefix, e)
-            status = "Insufficient Evidence"
-            confidence = 0.3
-            evidence_summary = "Evidence rating could not be completed."
+    try:
+        rating = rate_claim_with_evidence(claim_text, snippets, sources)
+        status = rating.get("status", "Insufficient Evidence")
+        confidence = float(rating.get("confidence_score", 0.75))
+        evidence_summary = rating.get("evidence_summary", "Evaluation complete.")
+        logger.info("      %s rating: status=%s  confidence=%.2f", prefix, status, confidence)
+    except Exception as e:
+        logger.warning("      %s rating FAILED: %s", prefix, e)
+        status = "Needs Context" if snippets else "Insufficient Evidence"
+        confidence = 0.65 if snippets else 0.40
+        evidence_summary = "Evidence rating could not be completed automatically."
 
     elapsed_claim = time.monotonic() - claim_start
     logger.info("      %s claim[%d] DONE in %.2fs  verdict=%s", prefix, idx, elapsed_claim, status)

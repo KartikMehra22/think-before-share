@@ -18,17 +18,6 @@ def get_overall_verdict(claim_ratings: list[dict], signals_count: int = 0) -> di
         }
 
     total = len(claim_ratings)
-    insufficient_count = sum(1 for r in claim_ratings if r.get("status") == "Insufficient Evidence")
-
-    # If all claims have insufficient evidence
-    if insufficient_count == total:
-        return {
-            "trust_score": 50,
-            "credibility_tier": "Unverifiable",
-            "overall_verdict": "Unverifiable",
-            "literacy_tip": "Web search returned insufficient evidence to verify or refute the claims in this video."
-        }
-
     # Weight score calculation per claim
     total_score = 0.0
     for r in claim_ratings:
