@@ -45,10 +45,14 @@ def _do_get_insights(transcript: str, model_name: str) -> dict:
 
         result = json.loads(raw_json)
         signals = result.get("signals", [])
-        logger.info("get_insights: %d signal(s) extracted", len(signals))
+        deepfake_risk = result.get("deepfake_risk", "Low Risk")
+        deepfake_indicators = result.get("deepfake_indicators", [])
+        logger.info("get_insights: %d signal(s) extracted  deepfake_risk=%s", len(signals), deepfake_risk)
         return {
             "signals": signals,
             "detailed_signals": result.get("detailed_signals", []),
+            "deepfake_risk": deepfake_risk,
+            "deepfake_indicators": deepfake_indicators,
             "shareability_recommendation": result.get(
                 "shareability_recommendation",
                 "Verify key factual claims before forwarding or posting."
@@ -61,7 +65,13 @@ def _do_get_insights(transcript: str, model_name: str) -> dict:
         if isinstance(e, ResourceExhausted):
             raise
         logger.error("get_insights: failed — %s", repr(e))
-        return {"signals": [], "detailed_signals": [], "shareability_recommendation": "Verify key claims before sharing."}
+        return {
+            "signals": [],
+            "detailed_signals": [],
+            "deepfake_risk": "Low Risk",
+            "deepfake_indicators": [],
+            "shareability_recommendation": "Verify key claims before sharing."
+        }
 
 
 def get_insights(transcript: str) -> dict:

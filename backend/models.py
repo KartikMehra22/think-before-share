@@ -40,6 +40,8 @@ class AnalysisResult(BaseModel):
     overall_verdict: Literal["Mostly Accurate", "Mixed", "Mostly Misleading", "Unverifiable"]
     literacy_tip: str
     shareability_recommendation: str = "Verify key claims before forwarding or posting."
+    deepfake_risk: Literal["Low Risk", "Medium Risk", "High Risk"] = "Low Risk"
+    deepfake_indicators: list[str] = []
     signals: list[str] = []
     detailed_signals: list[MediaSignal] = []
 

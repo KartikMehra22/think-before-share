@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -83,16 +84,73 @@ def _done(job_id: str, t0: float, label: str):
     logger.info("└─ [%s] DONE: %s  (%.2fs)", job_id[:8], label, elapsed)
 
 
+def _process_single_claim(idx: int, total: int, claim_obj, prefix: str) -> tuple[EvidencedClaim, dict]:
+    claim_text = claim_obj.claim
+    search_q = claim_obj.search_query
+    claim_start = time.monotonic()
+    logger.info("   %s ── [PARALLEL] claim[%d/%d]: %.80s", prefix, idx, total, claim_text)
+
+    try:
+        evidence = search_evidence(claim_text, search_query=search_q)
+        snippets = evidence["snippets"]
+        sources = evidence["sources"]
+        logger.info(
+            "      %s search: %d snippet(s) from %d source(s)",
+            prefix, len(snippets), len([s for s in sources if s != "tavily-synthesis"])
+        )
+    except Exception as e:
+        logger.warning("      %s search FAILED: %s", prefix, e)
+        snippets = []
+        sources = []
+
+    confidence = 0.5
+    if not snippets:
+        status = "Insufficient Evidence"
+        evidence_summary = "No search evidence was found for this claim."
+    else:
+        try:
+            rating = rate_claim_with_evidence(claim_text, snippets, sources)
+            status = rating.get("status", "Insufficient Evidence")
+            confidence = float(rating.get("confidence_score", 0.75))
+            evidence_summary = rating.get("evidence_summary", "Unable to retrieve evidence.")
+            logger.info("      %s rating: status=%s  confidence=%.2f", prefix, status, confidence)
+        except Exception as e:
+            logger.warning("      %s rating FAILED: %s", prefix, e)
+            status = "Insufficient Evidence"
+            confidence = 0.3
+            evidence_summary = "Evidence rating could not be completed."
+
+    elapsed_claim = time.monotonic() - claim_start
+    logger.info("      %s claim[%d] DONE in %.2fs  verdict=%s", prefix, idx, elapsed_claim, status)
+
+    ev_claim = EvidencedClaim(
+        claim=claim_text,
+        search_query=search_q,
+        speaker=claim_obj.speaker,
+        timestamp_hint=claim_obj.timestamp_hint,
+        status=status,
+        confidence_score=confidence,
+        evidence_summary=evidence_summary,
+        sources=[s for s in sources if s != "tavily-synthesis"],
+    )
+    rating_dict = {
+        "claim": claim_text,
+        "status": status,
+        "confidence_score": confidence,
+    }
+    return ev_claim, rating_dict
+
+
 def run_analysis_pipeline(job_id: str, url: str):
     """
     Background pipeline:
     1. Extract YouTube video ID from URL
     2. Fetch transcript
     3. Extract factual claims via Gemini
-    4. Search for evidence per claim via Tavily
-    5. Rate each claim via Gemini
+    4. Search for evidence per claim via Tavily (Parallelized)
+    5. Rate each claim via Gemini (Parallelized)
     6. Generate overall verdict + literacy tip
-    7. Extract media literacy signals
+    7. Extract media literacy signals + deepfake risk
     """
     pipeline_start = time.monotonic()
     prefix = f"[{job_id[:8]}]"
@@ -167,90 +225,47 @@ def run_analysis_pipeline(job_id: str, url: str):
             ])
             return
 
-        # ── Step 4 & 5: Search + Rate each claim ─────────────────────────────
-        t0 = _step(job_id, "analyzing_evidence", f"Analyze evidence for {len(claims)} claims")
+        # ── Step 4 & 5: Parallel Search + Rate each claim ─────────────────────
+        t0 = _step(job_id, "analyzing_evidence", f"Analyze evidence for {len(claims)} claims (Parallel)")
         jobs[job_id].stages_complete.append("extracting_claims")
         evidenced_claims: list[EvidencedClaim] = []
         claim_ratings_for_verdict = []
 
-        for idx, claim_obj in enumerate(claims, start=1):
-            claim_text = claim_obj.claim
-            search_q = claim_obj.search_query
-            claim_start = time.monotonic()
-            logger.info("   %s ── claim[%d/%d]: %.80s", prefix, idx, len(claims), claim_text)
+        # Execute parallel claim verification tasks
+        with ThreadPoolExecutor(max_workers=min(len(claims), 5)) as executor:
+            futures = [
+                executor.submit(_process_single_claim, idx, len(claims), claim_obj, prefix)
+                for idx, claim_obj in enumerate(claims, start=1)
+            ]
+            results = [f.result() for f in futures]
 
-            # Search for evidence
-            try:
-                evidence = search_evidence(claim_text, search_query=search_q)
-                snippets = evidence["snippets"]
-                sources = evidence["sources"]
-                logger.info(
-                    "      %s search: %d snippet(s) from %d source(s)",
-                    prefix, len(snippets), len([s for s in sources if s != "tavily-synthesis"])
-                )
-            except Exception as e:
-                logger.warning("      %s search FAILED: %s", prefix, e)
-                snippets = []
-                sources = []
+        for ev_claim, rating_dict in results:
+            evidenced_claims.append(ev_claim)
+            claim_ratings_for_verdict.append(rating_dict)
 
-            # Rate claim with Gemini
-            confidence = 0.5
-            if not snippets:
-                status = "Insufficient Evidence"
-                evidence_summary = "No search evidence was found for this claim."
-                logger.info("      %s rating: skipped (no evidence)", prefix)
-            else:
-                try:
-                    rating = rate_claim_with_evidence(claim_text, snippets, sources)
-                    status = rating.get("status", "Insufficient Evidence")
-                    confidence = float(rating.get("confidence_score", 0.75))
-                    evidence_summary = rating.get("evidence_summary", "Unable to retrieve evidence.")
-                    logger.info("      %s rating: status=%s  confidence=%.2f", prefix, status, confidence)
-                except Exception as e:
-                    logger.warning("      %s rating FAILED: %s", prefix, e)
-                    status = "Insufficient Evidence"
-                    confidence = 0.3
-                    evidence_summary = "Evidence rating could not be completed."
+        _done(job_id, t0, "Analyze evidence (Parallel execution finished)")
 
-            elapsed_claim = time.monotonic() - claim_start
-            logger.info("      %s claim[%d] total: %.2fs  verdict=%s", prefix, idx, elapsed_claim, status)
-
-            evidenced_claims.append(
-                EvidencedClaim(
-                    claim=claim_text,
-                    search_query=search_q,
-                    speaker=claim_obj.speaker,
-                    timestamp_hint=claim_obj.timestamp_hint,
-                    status=status,
-                    confidence_score=confidence,
-                    evidence_summary=evidence_summary,
-                    sources=[s for s in sources if s != "tavily-synthesis"],
-                )
-            )
-            claim_ratings_for_verdict.append({
-                "claim": claim_text,
-                "status": status,
-                "confidence_score": confidence,
-            })
-
-        _done(job_id, t0, "Analyze evidence")
-
-        # ── Step 6 & 7: Media literacy signals & Verdict ──────────────────────
-        t0 = _step(job_id, "generating_insights", "Extract signals + calculate verdict")
+        # ── Step 6 & 7: Media literacy signals, Deepfake Risk & Verdict ────────
+        t0 = _step(job_id, "generating_insights", "Extract signals + deepfake risk + calculate verdict")
         jobs[job_id].stages_complete.append("analyzing_evidence")
         
         signals = []
         detailed_signals = []
+        deepfake_risk = "Low Risk"
+        deepfake_indicators = []
         shareability_recommendation = "Verify key factual claims before forwarding or posting."
+
         try:
             insights = get_insights(transcript)
             signals = insights.get("signals", [])
             detailed_signals = insights.get("detailed_signals", [])
+            deepfake_risk = insights.get("deepfake_risk", "Low Risk")
+            deepfake_indicators = insights.get("deepfake_indicators", [])
             shareability_recommendation = insights.get(
                 "shareability_recommendation",
                 "Verify key factual claims before forwarding or posting."
             )
-            logger.info("   %s signals: %d found", prefix, len(signals))
+            logger.info("   %s signals: %d found  deepfake_risk=%s", prefix, len(signals), deepfake_risk)
         except Exception as e:
             logger.warning("   %s Insights FAILED: %s", prefix, e)
 
@@ -279,6 +294,8 @@ def run_analysis_pipeline(job_id: str, url: str):
             overall_verdict=overall_verdict,
             literacy_tip=literacy_tip,
             shareability_recommendation=shareability_recommendation,
+            deepfake_risk=deepfake_risk,
+            deepfake_indicators=deepfake_indicators,
             signals=signals,
             detailed_signals=detailed_signals,
         )

@@ -93,7 +93,8 @@ def search_evidence(claim: str, search_query: str | None = None, max_results: in
 
     # Fallback retry if 0 results were found
     if not results_list and search_query:
-        fallback_query = f"fact check {claim.replace('\"', '').strip()[:80]}"
+        clean_claim_term = claim.replace('"', '').replace("'", "").strip()[:80]
+        fallback_query = f"fact check {clean_claim_term}"
         logger.info("search_evidence: 0 hits on primary query — trying fallback query=%r", fallback_query)
         try:
             response = client.search(

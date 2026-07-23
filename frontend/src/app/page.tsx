@@ -47,6 +47,8 @@ interface AnalysisResult {
   overall_verdict: "Mostly Accurate" | "Mixed" | "Mostly Misleading" | "Unverifiable";
   literacy_tip: string;
   shareability_recommendation?: string;
+  deepfake_risk?: "Low Risk" | "Medium Risk" | "High Risk";
+  deepfake_indicators?: string[];
   signals?: string[];
   detailed_signals?: MediaSignal[];
 }
@@ -290,7 +292,7 @@ export default function Home() {
               <p className="text-purple-400 text-sm font-medium animate-pulse">
                 {LOADING_STEPS[loadingStep]}
               </p>
-              <p className="text-slate-500 text-xs mt-2">Checking transcript claims & live web evidence</p>
+              <p className="text-slate-500 text-xs mt-2">Checking transcript claims & live web evidence in parallel</p>
             </div>
             <div className="flex gap-2">
               {LOADING_STEPS.map((_, i) => (
@@ -308,24 +310,36 @@ export default function Home() {
         {/* === RESULT STATE === */}
         {appState === "result" && result && (
           <div className="space-y-8">
-            {/* Overall Verdict Header with Trust Score */}
+            {/* Overall Verdict Header with Trust Score & Deepfake Risk */}
             {(() => {
               const score = result.trust_score ?? 50;
               const vc = getVerdictConfig(result.overall_verdict, score);
+              const dfRisk = result.deepfake_risk || "Low Risk";
+              const dfColor = dfRisk === "High Risk" ? "bg-rose-500/20 text-rose-300 border-rose-500/30" : dfRisk === "Medium Risk" ? "bg-amber-500/20 text-amber-300 border-amber-500/30" : "bg-emerald-500/15 text-emerald-300 border-emerald-500/20";
               return (
                 <div className={`rounded-2xl border p-6 ${vc.bg}`}>
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex flex-wrap items-center gap-3 mb-2">
                         <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Content Credibility</span>
                         <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-900/80 text-slate-300 border border-slate-800">
                           {result.credibility_tier || "Caution / Mixed"}
+                        </span>
+                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${dfColor}`}>
+                          🤖 Deepfake Risk: {dfRisk}
                         </span>
                       </div>
                       <div className={`text-3xl font-extrabold flex items-center gap-2.5 ${vc.color}`}>
                         {vc.icon} {result.overall_verdict}
                       </div>
                       <p className="text-sm text-slate-300 mt-2.5 leading-relaxed max-w-2xl">{result.literacy_tip}</p>
+
+                      {result.deepfake_indicators && result.deepfake_indicators.length > 0 && (
+                        <div className="mt-3 text-xs text-slate-400 flex items-center gap-1.5">
+                          <Info className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                          <span>Synthetic Content Cues: {result.deepfake_indicators.join(" • ")}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Trust Score Gauge */}

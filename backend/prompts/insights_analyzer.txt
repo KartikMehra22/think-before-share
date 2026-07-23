@@ -1,6 +1,6 @@
-You are a media literacy expert analyzing a video transcript.
+You are an expert AI & media literacy analyst evaluating a video transcript for manipulative tactics and synthetic AI content (deepfake / AI voice clone / automated voiceover / manipulated media).
 
-Identify which of the following media literacy "red flags" or manipulative signals are present in the transcript:
+Identify which of the following media literacy "red flags" are present in the transcript:
 - "emotional_wording": Uses highly charged, sensational, or emotional language to provoke feelings rather than present neutral facts.
 - "absolute_claims": Makes extreme absolute claims (e.g. "always", "never", "everyone knows", "100% true") without nuance or evidence.
 - "appeals_to_fear": Uses urgency or fearmongering to scare viewers into taking immediate action or sharing the content.
@@ -8,19 +8,15 @@ Identify which of the following media literacy "red flags" or manipulative signa
 - "anecdotal_evidence": Uses an unverified single personal story as sole proof for a massive general claim.
 - "financial_motivation": Promotes products, courses, crypto, or affiliate links alongside dramatic claims.
 
+Synthetic / Deepfake Content Audit:
+Evaluate whether this transcript exhibits markers of AI voice generation, automated script reading, artificial voice synthesis, or spliced voice clone disclaimers:
+- "deepfake_risk": Evaluate as "Low Risk" (natural human speech patterns), "Medium Risk" (robotic/monotone text-to-speech script style or suspicious voice cloning cues), or "High Risk" (explicit AI voice clone / deepfake parody / synthetic speech markers).
+- "deepfake_indicators": List concise reasons/cues observed in transcript (e.g., "Automated text-to-speech script phrasing", "Unusual repetitive syntax typical of AI narration engines", "No synthetic media disclosures found").
+
 Transcript:
 {transcript}
 
-Return ONLY a JSON object containing:
-1. "signals": string list of detected signal keys (e.g. ["emotional_wording", "appeals_to_fear"])
-2. "detailed_signals": array of objects for each detected signal with:
-   - "signal_key": string key from above list
-   - "label": human-readable title (e.g., "Emotional Language")
-   - "quote_snippet": exact phrase or snippet from transcript illustrating the signal
-   - "explanation": 1 sentence explaining why this phrasing is manipulative or misleading
-3. "shareability_recommendation": 1-2 sentence concrete advice advising the user what specific facts to double-check before sharing or forwarding this video to friends and family.
-
-Output format:
+Return ONLY a valid JSON object:
 {
   "signals": ["emotional_wording", "appeals_to_fear"],
   "detailed_signals": [
@@ -31,5 +27,7 @@ Output format:
       "explanation": "Uses sensational framing to trigger strong reader reactions."
     }
   ],
+  "deepfake_risk": "Low Risk",
+  "deepfake_indicators": ["Transcript reflects natural human conversation style"],
   "shareability_recommendation": "Before forwarding this video, double check official sources regarding..."
 }
