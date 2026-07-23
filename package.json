@@ -1,0 +1,10 @@
+{
+  "name": "think-before-share",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "./scripts/run.sh",
+    "dev:terms": "./scripts/run.sh --terms",
+    "start": "./scripts/run.sh"
+  }
+}
