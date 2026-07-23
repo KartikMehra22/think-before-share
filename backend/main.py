@@ -175,12 +175,13 @@ def run_analysis_pipeline(job_id: str, url: str):
 
         for idx, claim_obj in enumerate(claims, start=1):
             claim_text = claim_obj.claim
+            search_q = claim_obj.search_query
             claim_start = time.monotonic()
             logger.info("   %s ── claim[%d/%d]: %.80s", prefix, idx, len(claims), claim_text)
 
             # Search for evidence
             try:
-                evidence = search_evidence(claim_text)
+                evidence = search_evidence(claim_text, search_query=search_q)
                 snippets = evidence["snippets"]
                 sources = evidence["sources"]
                 logger.info(
@@ -193,6 +194,7 @@ def run_analysis_pipeline(job_id: str, url: str):
                 sources = []
 
             # Rate claim with Gemini
+            confidence = 0.5
             if not snippets:
                 status = "Insufficient Evidence"
                 evidence_summary = "No search evidence was found for this claim."
@@ -201,11 +203,13 @@ def run_analysis_pipeline(job_id: str, url: str):
                 try:
                     rating = rate_claim_with_evidence(claim_text, snippets, sources)
                     status = rating.get("status", "Insufficient Evidence")
+                    confidence = float(rating.get("confidence_score", 0.75))
                     evidence_summary = rating.get("evidence_summary", "Unable to retrieve evidence.")
-                    logger.info("      %s rating: status=%s", prefix, status)
+                    logger.info("      %s rating: status=%s  confidence=%.2f", prefix, status, confidence)
                 except Exception as e:
                     logger.warning("      %s rating FAILED: %s", prefix, e)
                     status = "Insufficient Evidence"
+                    confidence = 0.3
                     evidence_summary = "Evidence rating could not be completed."
 
             elapsed_claim = time.monotonic() - claim_start
@@ -214,51 +218,69 @@ def run_analysis_pipeline(job_id: str, url: str):
             evidenced_claims.append(
                 EvidencedClaim(
                     claim=claim_text,
+                    search_query=search_q,
                     speaker=claim_obj.speaker,
                     timestamp_hint=claim_obj.timestamp_hint,
                     status=status,
+                    confidence_score=confidence,
                     evidence_summary=evidence_summary,
                     sources=[s for s in sources if s != "tavily-synthesis"],
                 )
             )
-            claim_ratings_for_verdict.append({"claim": claim_text, "status": status})
+            claim_ratings_for_verdict.append({
+                "claim": claim_text,
+                "status": status,
+                "confidence_score": confidence,
+            })
 
         _done(job_id, t0, "Analyze evidence")
 
-        # ── Step 6: Overall verdict ───────────────────────────────────────────
-        t0 = _step(job_id, "generating_insights", "Generate verdict + literacy tip")
+        # ── Step 6 & 7: Media literacy signals & Verdict ──────────────────────
+        t0 = _step(job_id, "generating_insights", "Extract signals + calculate verdict")
         jobs[job_id].stages_complete.append("analyzing_evidence")
-        try:
-            verdict_data = get_overall_verdict(claim_ratings_for_verdict)
-            overall_verdict = verdict_data.get("overall_verdict", "Unverifiable")
-            literacy_tip = verdict_data.get("literacy_tip", "Always verify claims before sharing content.")
-            logger.info("   %s verdict=%s", prefix, overall_verdict)
-            _done(job_id, t0, f"Generate verdict → {overall_verdict}")
-        except Exception as e:
-            logger.warning("   %s Verdict generation FAILED: %s", prefix, e)
-            overall_verdict = "Unverifiable"
-            literacy_tip = "Always verify claims before sharing content online."
-            _done(job_id, t0, "Generate verdict → FAILED (fallback)")
-
-        # ── Step 7: Media literacy signals ────────────────────────────────────
-        t0 = time.monotonic()
-        logger.info("   %s Extracting media literacy signals…", prefix)
+        
+        signals = []
+        detailed_signals = []
+        shareability_recommendation = "Verify key factual claims before forwarding or posting."
         try:
             insights = get_insights(transcript)
             signals = insights.get("signals", [])
-            elapsed = time.monotonic() - t0
-            logger.info("   %s signals: %d found  (%.2fs)", prefix, len(signals), elapsed)
+            detailed_signals = insights.get("detailed_signals", [])
+            shareability_recommendation = insights.get(
+                "shareability_recommendation",
+                "Verify key factual claims before forwarding or posting."
+            )
+            logger.info("   %s signals: %d found", prefix, len(signals))
         except Exception as e:
             logger.warning("   %s Insights FAILED: %s", prefix, e)
-            signals = []
+
+        try:
+            verdict_data = get_overall_verdict(claim_ratings_for_verdict, signals_count=len(signals))
+            overall_verdict = verdict_data.get("overall_verdict", "Unverifiable")
+            trust_score = verdict_data.get("trust_score", 50)
+            credibility_tier = verdict_data.get("credibility_tier", "Caution / Mixed")
+            literacy_tip = verdict_data.get("literacy_tip", "Always verify claims before sharing content.")
+            logger.info("   %s trust_score=%d  tier=%s  verdict=%s", prefix, trust_score, credibility_tier, overall_verdict)
+            _done(job_id, t0, f"Generate verdict → {overall_verdict} ({trust_score}%)")
+        except Exception as e:
+            logger.warning("   %s Verdict generation FAILED: %s", prefix, e)
+            overall_verdict = "Unverifiable"
+            trust_score = 50
+            credibility_tier = "Unverifiable"
+            literacy_tip = "Always verify claims before sharing content online."
+            _done(job_id, t0, "Generate verdict → FAILED (fallback)")
 
         jobs[job_id].result = AnalysisResult(
             video_id=video_id,
             video_url=url,
             claims=evidenced_claims,
+            trust_score=trust_score,
+            credibility_tier=credibility_tier,
             overall_verdict=overall_verdict,
             literacy_tip=literacy_tip,
+            shareability_recommendation=shareability_recommendation,
             signals=signals,
+            detailed_signals=detailed_signals,
         )
         jobs[job_id].stage = "done"
         jobs[job_id].stages_complete.append("generating_insights")

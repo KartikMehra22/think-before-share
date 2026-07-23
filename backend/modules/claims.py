@@ -28,6 +28,7 @@ def _do_extract_claims(transcript: str, model_name: str) -> list[Claim]:
         generation_config=genai.types.GenerationConfig(
             temperature=0.1,
             max_output_tokens=2048,
+            response_mime_type="application/json",
         ),
     )
 

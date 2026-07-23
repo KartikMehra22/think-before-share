@@ -1,26 +1,71 @@
-def get_overall_verdict(claim_ratings: list[dict]) -> dict:
-    """Produce an overall verdict based purely on math/aggregation of claims."""
+def get_overall_verdict(claim_ratings: list[dict], signals_count: int = 0) -> dict:
+    """
+    Produce a mathematical trust_score (0-100), overall verdict, and credibility tier
+    based on claim ratings and media literacy signals.
+    """
     if not claim_ratings:
         return {
+            "trust_score": 0,
+            "credibility_tier": "Unverifiable",
             "overall_verdict": "Unverifiable",
             "literacy_tip": "No verifiable factual claims were found in this video."
         }
 
     total = len(claim_ratings)
-    supported_count = sum(1 for r in claim_ratings if r["status"] == "Supported")
-    contradicted_count = sum(1 for r in claim_ratings if r["status"] == "Contradicted")
+    supported_count = sum(1 for r in claim_ratings if r.get("status") == "Supported")
+    needs_context_count = sum(1 for r in claim_ratings if r.get("status") == "Needs Context")
+    contradicted_count = sum(1 for r in claim_ratings if r.get("status") == "Contradicted")
+    insufficient_count = sum(1 for r in claim_ratings if r.get("status") == "Insufficient Evidence")
 
-    if supported_count / total > 0.5:
+    # If all claims have insufficient evidence
+    if insufficient_count == total:
+        return {
+            "trust_score": 50,
+            "credibility_tier": "Unverifiable",
+            "overall_verdict": "Unverifiable",
+            "literacy_tip": "Web search returned insufficient evidence to verify or refute the claims in this video."
+        }
+
+    # Weight score calculation per claim
+    total_score = 0.0
+    for r in claim_ratings:
+        status = r.get("status", "Insufficient Evidence")
+        confidence = float(r.get("confidence_score", 0.7))
+
+        if status == "Supported":
+            item_score = 100.0 * confidence
+        elif status == "Needs Context":
+            item_score = 55.0 * confidence
+        elif status == "Insufficient Evidence":
+            item_score = 40.0
+        else:  # Contradicted
+            item_score = 0.0
+
+        total_score += item_score
+
+    raw_trust_score = total_score / total
+
+    # Subtle penalty for media literacy red flags (max 15% penalty)
+    flag_penalty = min(signals_count * 3, 15)
+    trust_score = max(0, min(100, int(round(raw_trust_score - flag_penalty))))
+
+    if trust_score >= 80:
         verdict = "Mostly Accurate"
-        tip = "Most of the claims in this video are supported by outside evidence. Still, always verify extraordinary claims yourself."
-    elif contradicted_count / total > 0.5:
-        verdict = "Mostly Misleading"
-        tip = "Many claims in this video contradict established evidence. Be extremely skeptical of its conclusions."
-    else:
+        tier = "Verified / High Credibility"
+        tip = "Most claims in this video are supported by outside evidence. Keep checking sources for new developments."
+    elif trust_score >= 50:
         verdict = "Mixed"
-        tip = "This video contains a mix of accurate and inaccurate (or unverifiable) information. Take care to verify specific points."
+        tier = "Caution / Mixed"
+        tip = "This content presents a mixture of verified facts and unconfirmed or missing context. Double-check specific statements."
+    else:
+        verdict = "Mostly Misleading"
+        tier = "Misleading / Low Credibility"
+        tip = "A significant portion of the claims in this video contradict evidence or lack context. Exercise high skepticism before sharing."
 
     return {
+        "trust_score": trust_score,
+        "credibility_tier": tier,
         "overall_verdict": verdict,
-        "literacy_tip": tip
+        "literacy_tip": tip,
     }
+

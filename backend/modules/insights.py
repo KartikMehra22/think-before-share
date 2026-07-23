@@ -21,7 +21,8 @@ def _do_get_insights(transcript: str, model_name: str) -> dict:
             prompt,
             generation_config=genai.types.GenerationConfig(
                 temperature=0.1,
-                max_output_tokens=512,
+                max_output_tokens=1024,
+                response_mime_type="application/json",
             ),
         )
 
@@ -45,7 +46,14 @@ def _do_get_insights(transcript: str, model_name: str) -> dict:
         result = json.loads(raw_json)
         signals = result.get("signals", [])
         logger.info("get_insights: %d signal(s) extracted", len(signals))
-        return result
+        return {
+            "signals": signals,
+            "detailed_signals": result.get("detailed_signals", []),
+            "shareability_recommendation": result.get(
+                "shareability_recommendation",
+                "Verify key factual claims before forwarding or posting."
+            ),
+        }
 
     except Exception as e:
         # Don't catch ResourceExhausted here so it bubbles up to the retry wrapper
@@ -53,7 +61,7 @@ def _do_get_insights(transcript: str, model_name: str) -> dict:
         if isinstance(e, ResourceExhausted):
             raise
         logger.error("get_insights: failed — %s", repr(e))
-        return {"signals": []}
+        return {"signals": [], "detailed_signals": [], "shareability_recommendation": "Verify key claims before sharing."}
 
 
 def get_insights(transcript: str) -> dict:

@@ -32,6 +32,7 @@ def _do_rate_claim(claim: str, evidence_snippets: list[str], sources: list[str],
         generation_config=genai.types.GenerationConfig(
             temperature=0.1,
             max_output_tokens=512,
+            response_mime_type="application/json",
         ),
     )
 

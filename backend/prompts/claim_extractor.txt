@@ -4,16 +4,17 @@ Your task: Extract the 3-6 most important FACTUAL CLAIMS from the transcript bel
 
 Rules:
 - Focus on VERIFIABLE factual statements (statistics, named entities, events, scientific claims, historical facts).
-- Ignore opinions, predictions, rhetorical questions, and introductions.
-- Each claim should be a standalone sentence that can be searched for independently.
-- If you can identify a speaker context or approximate timing, include it.
-- Output ONLY valid JSON — no markdown, no explanation.
+- Ignore opinions, predictions, rhetorical questions, personal anecdotes, and channel intros/outros.
+- Each claim should be an atomic, standalone sentence clearly stating who/what/where/when.
+- For each claim, generate an optimized, concise web search query (3-6 key terms, NO exact string quote marks) that a fact-checker would type into Google or a search engine to verify the claim.
+- Output ONLY valid JSON — no markdown syntax wrappers, no explanations outside JSON.
 
 Output format:
 {
   "claims": [
     {
       "claim": "The factual claim as a clear, standalone sentence.",
+      "search_query": "concise key entity terms for search engine lookup",
       "speaker": "Speaker name if identifiable, or null",
       "timestamp_hint": "early | midway | near the end | null"
     }

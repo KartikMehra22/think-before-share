@@ -37,7 +37,7 @@ def _save_cache(cache: dict):
     except Exception as e:
         logger.warning("Failed to write search cache file at %s: %s", CACHE_FILE, e)
 
-def search_evidence(claim: str, max_results: int = 3) -> dict:
+def search_evidence(claim: str, search_query: str | None = None, max_results: int = 4) -> dict:
     """
     Search the web for evidence related to a factual claim.
     Returns a dict with 'snippets' (list of str) and 'sources' (list of URLs).
@@ -66,17 +66,46 @@ def search_evidence(claim: str, max_results: int = 3) -> dict:
 
     client = TavilyClient(api_key=api_key)
 
-    # Use a fact-checking oriented search query
-    query = f'fact check: "{claim}"'
-    logger.debug("search_evidence: query=%r", query)
+    # Build an optimized, non-quoted fact-checking query
+    if search_query and len(search_query.strip()) > 3:
+        clean_keywords = search_query.replace('"', '').strip()
+        query = f"fact check {clean_keywords}"
+    else:
+        # Strip quote marks and unnecessary punctuation from full claim sentence
+        clean_claim = claim.replace('"', '').replace("'", "").strip()
+        query = f"fact check {clean_claim}"
+
+    logger.debug("search_evidence: primary query=%r", query)
 
     t0 = time.monotonic()
-    response = client.search(
-        query=query,
-        search_depth="basic",
-        max_results=max_results,
-        include_answer=True,
-    )
+    try:
+        response = client.search(
+            query=query,
+            search_depth="basic",
+            max_results=max_results,
+            include_answer=True,
+        )
+    except Exception as exc:
+        logger.error("search_evidence: Tavily primary search failed err=%s", exc)
+        response = {}
+
+    results_list = response.get("results", [])
+
+    # Fallback retry if 0 results were found
+    if not results_list and search_query:
+        fallback_query = f"fact check {claim.replace('\"', '').strip()[:80]}"
+        logger.info("search_evidence: 0 hits on primary query — trying fallback query=%r", fallback_query)
+        try:
+            response = client.search(
+                query=fallback_query,
+                search_depth="basic",
+                max_results=max_results,
+                include_answer=True,
+            )
+            results_list = response.get("results", [])
+        except Exception as exc:
+            logger.error("search_evidence: Tavily fallback search failed err=%s", exc)
+
     tavily_elapsed = time.monotonic() - t0
 
     snippets = []
@@ -88,7 +117,7 @@ def search_evidence(claim: str, max_results: int = 3) -> dict:
         sources.append("tavily-synthesis")
 
     # Include individual search result snippets
-    for result in response.get("results", []):
+    for result in results_list:
         content = result.get("content", "").strip()
         url = result.get("url", "")
         if content:
@@ -104,9 +133,9 @@ def search_evidence(claim: str, max_results: int = 3) -> dict:
     )
 
     if use_cache:
-        # Reload cache to avoid race conditions/overwriting recent writes in same/separate process
         cache = _load_cache()
         cache[normalized_claim] = result_data
         _save_cache(cache)
 
     return result_data
+
